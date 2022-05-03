@@ -1,0 +1,41 @@
+version: 0.2
+env:
+  shell: bash
+  variables:
+    IMAGE: 'thisissamarpan-website'
+phases:
+  install:
+    on-failure: ABORT
+    runtime-versions:
+      nodejs: 14
+    commands:
+      - echo Install Terraform ClI
+      - apt-get update && apt-get install -y gnupg software-properties-common curl
+      - curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
+      - apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+      - apt-get update && apt-get install terraform
+      - terraform -help
+      - echo Install typescript
+      - echo Install CDKTF CLI
+      - npm install -g cdktf-cli@latest --unsafe-perm=true
+      - cd cdktf && npm ci
+      - cd ..
+  build:
+    commands:
+      - aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${ACCOUNT_NUMBER}.dkr.ecr.${REGION}.amazonaws.com
+      - aws ecr create-repository --repository-name ${IMAGE} || true
+      - export FULLNAME="${ACCOUNT_NUMBER}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE}:latest"
+      - docker build . -t ${IMAGE}
+      - docker tag ${IMAGE} ${FULLNAME}
+      - docker push ${FULLNAME}
+      - echo Run cdktf command to build out everything in the stack-resources file
+      - cd cdktf
+      - cdktf deploy --auto-approve
+  post_build:
+    commands:
+      - echo Build completed on `date`
+
+artifacts:
+  files:
+    - '**/*'
+  name: BuildArtifact

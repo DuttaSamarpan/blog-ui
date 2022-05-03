@@ -1,16 +1,19 @@
 import { Construct } from "constructs";
 import { App, TerraformStack, RemoteBackend } from "cdktf";
 import { DataAwsVpc, InternetGateway, RouteTable, RouteTableAssociation, SecurityGroup, Subnet } from "@cdktf/provider-aws/lib/vpc";
-import { AwsProvider, route53 } from "@cdktf/provider-aws";
+import { AwsProvider } from "@cdktf/provider-aws";
 import { Lb, LbListener, LbTargetGroup } from "@cdktf/provider-aws/lib/elb";
 import { EcsCluster, EcsService, EcsTaskDefinition } from "@cdktf/provider-aws/lib/ecs";
 import { IamRole } from "@cdktf/provider-aws/lib/iam";
 import { DataAwsRoute53Zone, Route53Record } from "@cdktf/provider-aws/lib/route53";
+import { AcmCertificate } from "@cdktf/provider-aws/lib/acm/acm-certificate";
+import { AcmCertificateValidation } from "@cdktf/provider-aws/lib/acm";
 
 export interface WebsiteRootStackOptions {
   environment: string;
   containerName: string;
   region: string;
+  imageUri: string;
 }
 
 class WebsiteRootStack extends TerraformStack {
@@ -20,13 +23,13 @@ class WebsiteRootStack extends TerraformStack {
     const AccountProvider = new AwsProvider(this, 'website-account-provider', {
       region: 'us-east-1',
       profile: 'default'
-    })
+    });
 
     const defaultVpc = new DataAwsVpc(this, 'vpc-website', {
       default: true,
       cidrBlock: "172.31.0.0/16",
       provider: AccountProvider
-    })
+    });
 
     const subnetPublic2a = new Subnet(this, 'subnet-2a', {
       cidrBlock: '172.31.0.0/17',
@@ -35,7 +38,7 @@ class WebsiteRootStack extends TerraformStack {
       mapPublicIpOnLaunch: true,
       provider: AccountProvider,
       dependsOn: [defaultVpc]
-    })
+    });
 
     const subnetPublic2b = new Subnet(this, 'subnet-2b', {
       cidrBlock: '172.31.128.0/17',
@@ -44,13 +47,13 @@ class WebsiteRootStack extends TerraformStack {
       mapPublicIpOnLaunch: true,
       provider: AccountProvider,
       dependsOn: [defaultVpc]
-    })
+    });
 
     const vpcInternetGateway = new InternetGateway(this, 'internet-gateway', {
       vpcId: defaultVpc.id,
       dependsOn: [subnetPublic2a, subnetPublic2b],
       provider: AccountProvider
-    })
+    });
 
     const subnetRouteTable = new RouteTable(this, 'subnet-route-table', {
       vpcId: defaultVpc.id,
@@ -60,21 +63,21 @@ class WebsiteRootStack extends TerraformStack {
       }],
       dependsOn: [vpcInternetGateway],
       provider: AccountProvider
-    })
+    });
 
     const rtAssociation2a = new RouteTableAssociation(this, 'subnet-rt-2a',{
       subnetId: subnetPublic2a.id,
       routeTableId: subnetRouteTable.id,
       dependsOn:[subnetRouteTable],
       provider: AccountProvider
-    })
+    });
 
     const rtAssociation2b = new RouteTableAssociation(this, 'subnet-rt-2b',{
       subnetId: subnetPublic2b.id,
       routeTableId: subnetRouteTable.id,
       dependsOn:[subnetRouteTable],
       provider: AccountProvider
-    })
+    });
 
 
     const loadBalancerSecurityGroup = new SecurityGroup(this, 'load-balancer-sg',{
@@ -98,7 +101,7 @@ class WebsiteRootStack extends TerraformStack {
       vpcId: defaultVpc.id,
       dependsOn: [defaultVpc],
       provider: AccountProvider
-    })
+    });
 
     const vpcSecurityGroup = new SecurityGroup(this, 'website-vpc-sg', {
       name: 'website-vpc-sg',
@@ -120,7 +123,7 @@ class WebsiteRootStack extends TerraformStack {
       vpcId: defaultVpc.id,
       dependsOn: [loadBalancerSecurityGroup],
       provider: AccountProvider
-    })
+    });
 
     const albTargetGroup = new LbTargetGroup(this, 'load-balancer-target-group',{
       vpcId: defaultVpc.id,
@@ -129,7 +132,7 @@ class WebsiteRootStack extends TerraformStack {
       port: 80,
       dependsOn: [rtAssociation2a, rtAssociation2b],
       provider: AccountProvider
-    })
+    });
 
     const applicationLoadBalancer = new Lb(this, 'application-load-balancer', {
       name: 'website-alb',
@@ -139,7 +142,7 @@ class WebsiteRootStack extends TerraformStack {
       subnets: [subnetPublic2a.id, subnetPublic2b.id],
       dependsOn: [rtAssociation2a, rtAssociation2b],
       provider: AccountProvider
-    })
+    });
 
     const albListener = new LbListener(this, 'load-balancer-listener', {
       loadBalancerArn: applicationLoadBalancer.arn,
@@ -150,13 +153,13 @@ class WebsiteRootStack extends TerraformStack {
       port: 80,
       protocol: 'HTTP',
       dependsOn: [applicationLoadBalancer, albTargetGroup]
-    })
+    });
 
     const ecsCluster = new EcsCluster(this, `${options.environment}-website-ecs-cluster`, {
       name: `${options.environment}-website-ecs-cluster`,
       provider: AccountProvider,
       dependsOn: [albListener]
-    })
+    });
 
     const ecsTaskExecutionRole = new IamRole(this, 'ecs-task-execution-role', {
       name: 'ecs-task-execution-role',
@@ -173,13 +176,13 @@ class WebsiteRootStack extends TerraformStack {
         ]
       }),
       managedPolicyArns: ['arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy']
-    })
+    });
 
     const ecsTask = new EcsTaskDefinition(this, `${options.environment}-streamlit-ecs-task`, {
       family: `${options.containerName}`,
       containerDefinitions: JSON.stringify([{
         name: `${options.containerName}`,
-        image: 'httpd:2.4',
+        image: `${options.imageUri}`,
         cpu: 512,
         memory: 256,
         essential: true,
@@ -222,16 +225,48 @@ class WebsiteRootStack extends TerraformStack {
       provider: AccountProvider,
       dependsOn: [ecsTask],
       forceNewDeployment: true
-    })
+    });
+
+    /////////////////////
+    // Route53
+    /////////////////////
 
     const route53Zone = new DataAwsRoute53Zone(this, 'website-route-53-zone', {
       name: `${options.environment}.thisissamarpan.com.`,
       provider: AccountProvider,
       dependsOn: [ecsService]
-    })
+    });
 
+    // certificate
+    const cert = new AcmCertificate(this, 'website-cert', {
+      domainName: `${options.environment}.thisissamarpan.com`,
+      validationMethod: 'DNS',
+      provider: AccountProvider,
+      dependsOn: [route53Zone]
+    });
+
+    // certificate record in the hosted zone
+    const certRecord = new Route53Record(this, 'website-route53-record-cert-validation',{
+      dependsOn:[route53Zone, cert],
+      name: cert.domainValidationOptions.get(0).resourceRecordName,
+      records: [cert.domainValidationOptions.get(0).resourceRecordValue],
+      type: cert.domainValidationOptions.get(0).resourceRecordType,
+      zoneId: route53Zone.zoneId,
+      ttl: 300,
+      provider: AccountProvider
+    });
+
+    // certificate record validation
+    new AcmCertificateValidation(this, 'website-cert-validation',{
+      dependsOn: [cert, certRecord],
+      certificateArn: cert.arn,
+      validationRecordFqdns: [certRecord.fqdn],
+      provider: AccountProvider
+    });
+
+    // alias record to LoadBalancer
     new Route53Record(this, 'website-route-record', {
-      name: `server.${options.environment}.thisissamarpan.com`,
+      name: `${options.environment}.thisissamarpan.com`,
       type: 'A',
       zoneId: route53Zone.zoneId,
       dependsOn: [route53Zone],
@@ -241,17 +276,16 @@ class WebsiteRootStack extends TerraformStack {
         evaluateTargetHealth: false
       }],
       provider: AccountProvider
-    })
-    
-
+    });
   }
 }
 
 const app = new App();
 const stack = new WebsiteRootStack(app, "cdktf", {
-  environment: 'dev',
+  environment: `${process.env.STAGE}`,
   containerName: 'website-application-container',
-  region: 'us-east-1'
+  region: `${process.env.REGION}`,
+  imageUri: `${process.env.FULLNAME}`
 });
 new RemoteBackend(stack, {
   hostname: "app.terraform.io",
