@@ -3,6 +3,9 @@ env:
   shell: bash
   variables:
     IMAGE: 'thisissamarpan-website'
+  parameter-store:
+    AWS_ACCESS_KEY_ID: '/pipeline/dev/accessKeyId'
+    AWS_SECRET_ACCESS_KEY': /pipeline/dev/secretAccessKey
 phases:
   install:
     on-failure: ABORT

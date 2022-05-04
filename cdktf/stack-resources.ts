@@ -22,7 +22,8 @@ class WebsiteRootStack extends TerraformStack {
 
     const AccountProvider = new AwsProvider(this, 'website-account-provider', {
       region: 'us-east-1',
-      profile: 'default'
+      accessKey: process.env.AWS_ACCESS_KEY_ID,
+      secretKey: process.env.AWS_SECRET_ACCESS_KEY
     });
 
     const defaultVpc = new DataAwsVpc(this, 'vpc-website', {
