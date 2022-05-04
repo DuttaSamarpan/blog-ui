@@ -103,6 +103,9 @@ class WebsiteRootStack extends TerraformStack {
       platformVersion: 'LATEST',
       externalId: `${options.environment}-task-set`,
       dependsOn: [ecsTask,ecsCluster,ecsService],
+      scale: {
+        value: 100.0
+      },
       provider: AccountProvider
     })
 
