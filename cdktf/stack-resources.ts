@@ -1,11 +1,11 @@
 import { Construct } from "constructs";
-import { App, TerraformStack } from "cdktf";
+import { App, S3Backend, TerraformStack } from "cdktf";
 import { DataAwsVpc, InternetGateway, RouteTable, RouteTableAssociation, SecurityGroup, Subnet } from "@cdktf/provider-aws/lib/vpc";
 import { AwsProvider } from "@cdktf/provider-aws";
 import { Lb, LbListener, LbTargetGroup } from "@cdktf/provider-aws/lib/elb";
 import { EcsCluster, EcsService, EcsTaskDefinition } from "@cdktf/provider-aws/lib/ecs";
 import { IamRole } from "@cdktf/provider-aws/lib/iam";
-import { DataAwsRoute53Zone, Route53Record } from "@cdktf/provider-aws/lib/route53";
+import { DataAwsRoute53Zone, Route53Record, Route53Zone } from "@cdktf/provider-aws/lib/route53";
 import { AcmCertificate } from "@cdktf/provider-aws/lib/acm/acm-certificate";
 import { AcmCertificateValidation } from "@cdktf/provider-aws/lib/acm";
 
@@ -25,6 +25,76 @@ class WebsiteRootStack extends TerraformStack {
       accessKey: process.env.AWS_ACCESS_KEY_ID,
       secretKey: process.env.AWS_SECRET_ACCESS_KEY
     });
+
+    /////////////////////////////////////////////////////////////////////////////
+    //s3 backend to preserve terraform state
+    /////////////////////////////////////////////////////////////////////////////
+
+    new S3Backend(this, {
+      bucket: `webapp-cdktf-state`,
+      key: `webapp/${options.environment}`,
+      region: 'us-east-1'
+    })
+
+    /////////////////////
+    // Route53
+    /////////////////////
+
+    // root route53  hosted zone
+    const rootRoute53Zone = new DataAwsRoute53Zone(this, 'route53-root-zone',{
+      name: 'thisissamarpan.com.',
+      provider: AccountProvider
+    });
+
+    // hosted zone for subdomain
+    const deployRoute53Zone = new Route53Zone(this, 'website-route53-env-zone',{
+      name: `${options.environment}.thisissamarpan.com`,
+      comment: `${options.environment} Zone`,
+      provider: AccountProvider
+    });
+    
+    // NS records for subdomain
+    new Route53Record(this, 'subdomain-route53-record', {
+      dependsOn: [rootRoute53Zone],
+      name: `${options.environment}.thisissamarpan.com`,
+      type: 'NS',
+      records: deployRoute53Zone.nameServers,
+      ttl: 172800,
+      allowOverwrite: true,
+      zoneId: rootRoute53Zone.zoneId,
+      provider: AccountProvider
+    });
+
+    // certificate
+    const cert = new AcmCertificate(this, 'website-cert', {
+      domainName: `${options.environment}.thisissamarpan.com`,
+      validationMethod: 'DNS',
+      provider: AccountProvider,
+      dependsOn: [deployRoute53Zone]
+    });
+
+    // certificate record in the hosted zone
+    const certRecord = new Route53Record(this, 'website-route53-record-cert-validation',{
+      dependsOn:[deployRoute53Zone, cert],
+      name: cert.domainValidationOptions.get(0).resourceRecordName,
+      records: [cert.domainValidationOptions.get(0).resourceRecordValue],
+      type: cert.domainValidationOptions.get(0).resourceRecordType,
+      zoneId: deployRoute53Zone.zoneId,
+      ttl: 300,
+      provider: AccountProvider
+    });
+
+    // certificate record validation
+    new AcmCertificateValidation(this, 'website-cert-validation',{
+      dependsOn: [cert, certRecord],
+      certificateArn: cert.arn,
+      validationRecordFqdns: [certRecord.fqdn],
+      provider: AccountProvider
+    });
+
+    ////////////////////////////////////////
+    // Virtual Private Cloud (VPC)
+    ////////////////////////////////////////
 
     const defaultVpc = new DataAwsVpc(this, 'vpc-website', {
       default: true,
@@ -80,6 +150,9 @@ class WebsiteRootStack extends TerraformStack {
       provider: AccountProvider
     });
 
+    //////////////////////////////////////
+    //Security Groups
+    //////////////////////////////////////
 
     const loadBalancerSecurityGroup = new SecurityGroup(this, 'load-balancer-sg',{
       name: 'website-load-balancer-sg',
@@ -89,6 +162,11 @@ class WebsiteRootStack extends TerraformStack {
         cidrBlocks: ['0.0.0.0/0'],
         fromPort: 80,
         toPort: 80,
+        protocol: 'TCP'
+      },{
+        cidrBlocks: ['0.0.0.0/0'],
+        fromPort: 443,
+        toPort: 443,
         protocol: 'TCP'
       }],
       // egress allow all
@@ -126,6 +204,10 @@ class WebsiteRootStack extends TerraformStack {
       provider: AccountProvider
     });
 
+    ////////////////////////////////////////////
+    // Application Load Balancer
+    ////////////////////////////////////////////
+
     const albTargetGroup = new LbTargetGroup(this, 'load-balancer-target-group',{
       vpcId: defaultVpc.id,
       targetType: 'ip',
@@ -145,22 +227,36 @@ class WebsiteRootStack extends TerraformStack {
       provider: AccountProvider
     });
 
-    const albListener = new LbListener(this, 'load-balancer-listener', {
+    const albListenerhttp = new LbListener(this, 'load-balancer-listener-http', {
       loadBalancerArn: applicationLoadBalancer.arn,
       defaultAction: [{
-        type: 'forward',
-        targetGroupArn: albTargetGroup.arn
+        type: 'redirect',
+        redirect: {
+          port: '443',
+          protocol: 'HTTPS',
+          statusCode: 'HTTP_301'
+        }
       }],
       port: 80,
       protocol: 'HTTP',
       dependsOn: [applicationLoadBalancer, albTargetGroup]
     });
 
-    const ecsCluster = new EcsCluster(this, `${options.environment}-website-ecs-cluster`, {
-      name: `${options.environment}-website-ecs-cluster`,
-      provider: AccountProvider,
-      dependsOn: [albListener]
+    const albListenerhttps = new LbListener(this, 'load-balancer-listener-https', {
+      loadBalancerArn: applicationLoadBalancer.arn,
+      defaultAction: [{
+        type: 'forward',
+        targetGroupArn: albTargetGroup.arn
+      }],
+      port: 443,
+      protocol: 'HTTPS',
+      certificateArn: cert.arn,
+      dependsOn: [albListenerhttp],
     });
+
+    //////////////////////////////////////////
+    // ECS task execution role
+    //////////////////////////////////////////
 
     const ecsTaskExecutionRole = new IamRole(this, 'ecs-task-execution-role', {
       name: 'ecs-task-execution-role',
@@ -177,6 +273,16 @@ class WebsiteRootStack extends TerraformStack {
         ]
       }),
       managedPolicyArns: ['arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy']
+    });
+
+    ///////////////////////////////////////////////
+    // ECS fargate cluster, service and task
+    ///////////////////////////////////////////////
+
+    const ecsCluster = new EcsCluster(this, `${options.environment}-website-ecs-cluster`, {
+      name: `${options.environment}-website-ecs-cluster`,
+      provider: AccountProvider,
+      dependsOn: [albListenerhttp, albListenerhttps]
     });
 
     const ecsTask = new EcsTaskDefinition(this, `${options.environment}-streamlit-ecs-task`, {
@@ -206,7 +312,7 @@ class WebsiteRootStack extends TerraformStack {
       provider: AccountProvider
     });
 
-    const ecsService = new EcsService(this, 'website-ecs-service',{
+    new EcsService(this, 'website-ecs-service',{
       name: 'website-ecs-service',
       desiredCount: 2,
       taskDefinition: ecsTask.arn,
@@ -228,49 +334,16 @@ class WebsiteRootStack extends TerraformStack {
       forceNewDeployment: true
     });
 
-    /////////////////////
-    // Route53
-    /////////////////////
-
-    const route53Zone = new DataAwsRoute53Zone(this, 'website-route-53-zone', {
-      name: `${options.environment}.thisissamarpan.com.`,
-      provider: AccountProvider,
-      dependsOn: [ecsService]
-    });
-
-    // certificate
-    const cert = new AcmCertificate(this, 'website-cert', {
-      domainName: `${options.environment}.thisissamarpan.com`,
-      validationMethod: 'DNS',
-      provider: AccountProvider,
-      dependsOn: [route53Zone]
-    });
-
-    // certificate record in the hosted zone
-    const certRecord = new Route53Record(this, 'website-route53-record-cert-validation',{
-      dependsOn:[route53Zone, cert],
-      name: cert.domainValidationOptions.get(0).resourceRecordName,
-      records: [cert.domainValidationOptions.get(0).resourceRecordValue],
-      type: cert.domainValidationOptions.get(0).resourceRecordType,
-      zoneId: route53Zone.zoneId,
-      ttl: 300,
-      provider: AccountProvider
-    });
-
-    // certificate record validation
-    new AcmCertificateValidation(this, 'website-cert-validation',{
-      dependsOn: [cert, certRecord],
-      certificateArn: cert.arn,
-      validationRecordFqdns: [certRecord.fqdn],
-      provider: AccountProvider
-    });
+    ///////////////////////////////////////////////////
+    // Type A Record for Request Routing
+    ///////////////////////////////////////////////////
 
     // alias record to LoadBalancer
     new Route53Record(this, 'website-route-record', {
       name: `${options.environment}.thisissamarpan.com`,
       type: 'A',
-      zoneId: route53Zone.zoneId,
-      dependsOn: [route53Zone],
+      zoneId: deployRoute53Zone.zoneId,
+      dependsOn: [deployRoute53Zone],
       alias: [{
         zoneId: applicationLoadBalancer.zoneId,
         name: applicationLoadBalancer.dnsName,
@@ -278,6 +351,7 @@ class WebsiteRootStack extends TerraformStack {
       }],
       provider: AccountProvider
     });
+    
   }
 }
 
@@ -288,11 +362,5 @@ new WebsiteRootStack(app, "cdktf", {
   region: `${process.env.REGION}`,
   imageUri: `${process.env.FULLNAME}`
 });
-// new RemoteBackend(stack, {
-//   hostname: "app.terraform.io",
-//   organization: "thisissamarpan",
-//   workspaces: {
-//     name: "thisissamarpan-application"
-//   }
-// });
+
 app.synth();
