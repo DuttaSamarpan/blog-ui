@@ -4,6 +4,7 @@ import { DataAwsSubnetIds, DataAwsVpc } from "@cdktf/provider-aws/lib/vpc";
 import { AwsProvider } from "@cdktf/provider-aws";
 import { DataAwsEcsCluster, DataAwsEcsService, EcsTaskDefinition, EcsTaskSet } from "@cdktf/provider-aws/lib/ecs";
 import { DataAwsIamRole } from "@cdktf/provider-aws/lib/iam";
+import { DataAwsLbTargetGroup } from "@cdktf/provider-aws/lib/elb";
 
 export interface WebsiteRootStackOptions {
   environment: string;
@@ -72,6 +73,10 @@ class WebsiteRootStack extends TerraformStack {
       provider: AccountProvider
     });
 
+    const albTargetGroup = new DataAwsLbTargetGroup(this, 'data-lb-target-group', {
+      name: 'load-balancer-target-group'
+    })
+
     new EcsTaskSet(this, `${options.environment}-task-set`, {
       service: ecsService.arn,
       cluster: ecsCluster.arn,
@@ -81,6 +86,11 @@ class WebsiteRootStack extends TerraformStack {
         subnets: subnetIds.ids,
         assignPublicIp: true
       },
+      loadBalancer: [{
+        targetGroupArn: albTargetGroup.arn,
+        containerName: `${options.containerName}`,
+        containerPort: 80
+      }],
       platformVersion: '1.4.0',
       externalId: `${options.environment}-task-set`,
       provider: AccountProvider
