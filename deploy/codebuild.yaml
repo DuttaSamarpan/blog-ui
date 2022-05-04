@@ -30,7 +30,8 @@ phases:
       - docker push ${FULLNAME}
       - echo Run cdktf command to build out everything in the stack-resources file
       - cd cdktf
-      - cdktf deploy --auto-approve
+      - export CDKTF_DISABLE_LOGGING=false
+      - cdktf --log-level=error deploy --auto-approve
   post_build:
     commands:
       - echo Build completed on `date`
