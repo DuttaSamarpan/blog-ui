@@ -84,7 +84,7 @@ class WebsiteRootStack extends TerraformStack {
       service: ecsService.arn,
       cluster: ecsCluster.arn,
       taskDefinition: ecsTask.arn,
-      launchType: "FARGATE",
+      launchType: 'FARGATE',
       networkConfiguration: {
         subnets: subnetIds.ids,
         assignPublicIp: true
