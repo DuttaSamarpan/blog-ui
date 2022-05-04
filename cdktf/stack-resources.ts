@@ -281,17 +281,17 @@ class WebsiteRootStack extends TerraformStack {
 }
 
 const app = new App();
-const stack = new WebsiteRootStack(app, "cdktf", {
+new WebsiteRootStack(app, "cdktf", {
   environment: `${process.env.STAGE}`,
   containerName: 'website-application-container',
   region: `${process.env.REGION}`,
   imageUri: `${process.env.FULLNAME}`
 });
-new RemoteBackend(stack, {
-  hostname: "app.terraform.io",
-  organization: "thisissamarpan",
-  workspaces: {
-    name: "thisissamarpan-application"
-  }
-});
+// new RemoteBackend(stack, {
+//   hostname: "app.terraform.io",
+//   organization: "thisissamarpan",
+//   workspaces: {
+//     name: "thisissamarpan-application"
+//   }
+// });
 app.synth();
