@@ -1,6 +1,6 @@
 import { Construct } from "constructs";
 import { App, TerraformStack } from "cdktf";
-import { DataAwsSubnets, DataAwsVpc } from "@cdktf/provider-aws/lib/vpc";
+import { DataAwsSecurityGroup, DataAwsSubnets, DataAwsVpc } from "@cdktf/provider-aws/lib/vpc";
 import { AwsProvider } from "@cdktf/provider-aws";
 import { DataAwsEcsCluster, DataAwsEcsService, EcsTaskDefinition, EcsTaskSet } from "@cdktf/provider-aws/lib/ecs";
 import { DataAwsIamRole } from "@cdktf/provider-aws/lib/iam";
@@ -49,6 +49,11 @@ class WebsiteRootStack extends TerraformStack {
       name: 'ecs-task-execution-role'
     })
 
+    const vpcSecurityGroup = new DataAwsSecurityGroup(this, "security-group-data", {
+      vpcId: defaultVpc.id,
+      name: 'website-vpc-sg'
+    })
+
     const ecsTask = new EcsTaskDefinition(this, `${options.environment}-streamlit-ecs-task`, {
       family: `${options.containerName}`,
       containerDefinitions: JSON.stringify([{
@@ -86,6 +91,7 @@ class WebsiteRootStack extends TerraformStack {
       taskDefinition: ecsTask.arn,
       launchType: 'FARGATE',
       networkConfiguration: {
+        securityGroups: [vpcSecurityGroup.id],
         subnets: subnetIds.ids,
         assignPublicIp: true
       },
@@ -94,7 +100,7 @@ class WebsiteRootStack extends TerraformStack {
         containerName: `${options.containerName}`,
         containerPort: 80
       }],
-      platformVersion: '1.4.0',
+      platformVersion: 'LATEST',
       externalId: `${options.environment}-task-set`,
       provider: AccountProvider
     })
