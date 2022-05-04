@@ -1,6 +1,6 @@
 import { Construct } from "constructs";
 import { App, TerraformStack } from "cdktf";
-import { DataAwsSubnetIds, DataAwsVpc } from "@cdktf/provider-aws/lib/vpc";
+import { DataAwsSubnetIds, DataAwsSubnets, DataAwsVpc } from "@cdktf/provider-aws/lib/vpc";
 import { AwsProvider } from "@cdktf/provider-aws";
 import { DataAwsEcsCluster, DataAwsEcsService, EcsTaskDefinition, EcsTaskSet } from "@cdktf/provider-aws/lib/ecs";
 import { DataAwsIamRole } from "@cdktf/provider-aws/lib/iam";
@@ -29,8 +29,11 @@ class WebsiteRootStack extends TerraformStack {
       provider: AccountProvider
     });
 
-    const subnetIds = new DataAwsSubnetIds(this, 'subnets-data', {
-      vpcId: defaultVpc.id
+    const subnetIds = new DataAwsSubnets(this, 'subnets-data', {
+      filter: [{
+        name: 'vpc-id',
+        values: [defaultVpc.id]
+      }]
     })
 
     const ecsCluster = new DataAwsEcsCluster(this, 'cluster-data', {
