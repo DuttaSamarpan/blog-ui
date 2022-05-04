@@ -4,8 +4,9 @@ env:
   variables:
     IMAGE: 'thisissamarpan-website'
   parameter-store:
-    AWS_ACCESS_KEY_ID: '/pipeline/dev/accessKeyId'
-    AWS_SECRET_ACCESS_KEY': '/pipeline/dev/secretAccessKey'
+    AWS_ACCESS_KEY_ID: '/pipeline/$STAGE/accessKeyId'
+    AWS_SECRET_ACCESS_KEY: '/pipeline/$STAGE/secretAccessKey'
+
 phases:
   install:
     on-failure: ABORT
