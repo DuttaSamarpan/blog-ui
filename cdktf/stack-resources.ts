@@ -88,7 +88,7 @@ class WebsiteRootStack extends TerraformStack {
     new EcsTaskSet(this, `${options.environment}-task-set`, {
       service: ecsService.arn,
       cluster: ecsCluster.arn,
-      taskDefinition: ecsTask.arn,
+      taskDefinition: `${ecsTask.family}:${ecsTask.revision}`,
       launchType: "FARGATE",
       networkConfiguration: {
         securityGroups: [vpcSecurityGroup.id],
