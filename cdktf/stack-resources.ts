@@ -7,7 +7,7 @@ import { EcsCluster, EcsService, EcsTaskDefinition } from "@cdktf/provider-aws/l
 import { IamRole } from "@cdktf/provider-aws/lib/iam";
 import { DataAwsRoute53Zone, Route53Record, Route53Zone } from "@cdktf/provider-aws/lib/route53";
 import { AcmCertificate } from "@cdktf/provider-aws/lib/acm/acm-certificate";
-import { AcmCertificateValidation } from "@cdktf/provider-aws/lib/acm";
+import { AcmCertificateValidation } from "@cdktf/provider-aws/lib/acm/acm-certificate-validation";
 
 export interface WebsiteRootStackOptions {
   environment: string;
@@ -254,6 +254,24 @@ class WebsiteRootStack extends TerraformStack {
       dependsOn: [albListenerhttp],
     });
 
+    ///////////////////////////////////////////////////
+    // Type A Record for Request Routing
+    ///////////////////////////////////////////////////
+
+    // alias record to LoadBalancer
+    new Route53Record(this, 'website-route-record', {
+      name: `${options.environment}.thisissamarpan.com`,
+      type: 'A',
+      zoneId: deployRoute53Zone.zoneId,
+      dependsOn: [deployRoute53Zone],
+      alias: [{
+        zoneId: applicationLoadBalancer.zoneId,
+        name: applicationLoadBalancer.dnsName,
+        evaluateTargetHealth: false
+      }],
+      provider: AccountProvider
+    });
+
     //////////////////////////////////////////
     // ECS task execution role
     //////////////////////////////////////////
@@ -332,24 +350,6 @@ class WebsiteRootStack extends TerraformStack {
       provider: AccountProvider,
       dependsOn: [ecsTask],
       forceNewDeployment: true
-    });
-
-    ///////////////////////////////////////////////////
-    // Type A Record for Request Routing
-    ///////////////////////////////////////////////////
-
-    // alias record to LoadBalancer
-    new Route53Record(this, 'website-route-record', {
-      name: `${options.environment}.thisissamarpan.com`,
-      type: 'A',
-      zoneId: deployRoute53Zone.zoneId,
-      dependsOn: [deployRoute53Zone],
-      alias: [{
-        zoneId: applicationLoadBalancer.zoneId,
-        name: applicationLoadBalancer.dnsName,
-        evaluateTargetHealth: false
-      }],
-      provider: AccountProvider
     });
     
   }
