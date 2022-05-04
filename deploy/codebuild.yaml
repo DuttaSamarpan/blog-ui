@@ -18,6 +18,8 @@ phases:
       - echo Install typescript
       - echo Install CDKTF CLI
       - npm install -g cdktf-cli@latest --unsafe-perm=true
+      - echo Install terraform provider
+      - npm install @cdktf/provider-aws
       - cd cdktf && npm ci
       - cd ..
   build:
