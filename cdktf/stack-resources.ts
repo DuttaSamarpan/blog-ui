@@ -89,7 +89,7 @@ class WebsiteRootStack extends TerraformStack {
       service: ecsService.arn,
       cluster: ecsCluster.arn,
       taskDefinition: ecsTask.arn,
-      launchType: 'FARGATE',
+      launchType: "FARGATE",
       networkConfiguration: {
         securityGroups: [vpcSecurityGroup.id],
         subnets: subnetIds.ids,
@@ -102,6 +102,7 @@ class WebsiteRootStack extends TerraformStack {
       }],
       platformVersion: 'LATEST',
       externalId: `${options.environment}-task-set`,
+      dependsOn: [ecsTask,ecsCluster,ecsService],
       provider: AccountProvider
     })
 
