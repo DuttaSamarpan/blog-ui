@@ -300,6 +300,7 @@ class WebsiteRootStack extends TerraformStack {
         assignPublicIp: true,
         subnets: [subnetPublic2a.id]
       },
+      deploymentMaximumPercent: 100,
       platformVersion: '1.4.0',
       launchType: 'FARGATE',
       cluster: ecsCluster.arn,
