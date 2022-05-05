@@ -304,8 +304,7 @@ class WebsiteRootStack extends TerraformStack {
       launchType: 'FARGATE',
       cluster: ecsCluster.arn,
       provider: AccountProvider,
-      dependsOn: [ecsTask],
-      forceNewDeployment: true
+      dependsOn: [ecsTask]
     });
     
   }
