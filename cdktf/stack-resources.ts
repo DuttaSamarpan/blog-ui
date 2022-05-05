@@ -33,7 +33,7 @@ class WebsiteRootStack extends TerraformStack {
     });
 
     const cert = new DataAwsAcmCertificate(this, `data-ssl-cert-${options.environment}`, {
-      domain: `${options.environment}.thisissamarpan.com.`,
+      domain: `${options.environment}.thisissamarpan.com`,
       statuses: ["ISSUED"]
     })
 
