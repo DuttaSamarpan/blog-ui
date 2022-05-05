@@ -301,7 +301,7 @@ class WebsiteRootStack extends TerraformStack {
         subnets: [subnetPublic2a.id]
       },
       deploymentMaximumPercent: 100,
-      deploymentMinimumHealthyPercent: 0,
+      deploymentMinimumHealthyPercent: 75,
       platformVersion: '1.4.0',
       launchType: 'FARGATE',
       cluster: ecsCluster.arn,
