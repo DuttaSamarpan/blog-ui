@@ -28,11 +28,11 @@ class WebsiteRootStack extends TerraformStack {
     ///////////////////////////////////////////////////////
     // Route 53 hosted zone and ACM certificate
     ///////////////////////////////////////////////////////
-    const deployRoute53Zone = new DataAwsRoute53Zone(this, '', {
+    const deployRoute53Zone = new DataAwsRoute53Zone(this, `data-${options.environment}-zone`, {
       name: `${options.environment}.thisissamarpan.com.`
     });
 
-    const cert = new DataAwsAcmCertificate(this, '', {
+    const cert = new DataAwsAcmCertificate(this, `data-ssl-cert-${options.environment}`, {
       domain: `${options.environment}.thisissamarpan.com.`,
       statuses: ["ISSUED"]
     })
