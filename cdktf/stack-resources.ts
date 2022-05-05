@@ -6,8 +6,7 @@ import { Lb, LbListener, LbTargetGroup } from "@cdktf/provider-aws/lib/elb";
 import { EcsCluster, EcsService, EcsTaskDefinition } from "@cdktf/provider-aws/lib/ecs";
 import { IamRole } from "@cdktf/provider-aws/lib/iam";
 import { DataAwsRoute53Zone, Route53Record } from "@cdktf/provider-aws/lib/route53";
-import { AcmCertificate } from "@cdktf/provider-aws/lib/acm/acm-certificate";
-import { AcmCertificateValidation } from "@cdktf/provider-aws/lib/acm/acm-certificate-validation";
+import { DataAwsAcmCertificate } from "@cdktf/provider-aws/lib/acm";
 
 export interface WebsiteRootStackOptions {
   environment: string;
@@ -26,6 +25,18 @@ class WebsiteRootStack extends TerraformStack {
       secretKey: process.env.AWS_SECRET_ACCESS_KEY
     });
 
+    ///////////////////////////////////////////////////////
+    // Route 53 hosted zone and ACM certificate
+    ///////////////////////////////////////////////////////
+    const deployRoute53Zone = new DataAwsRoute53Zone(this, '', {
+      name: `${options.environment}.thisissamarpan.com.`
+    });
+
+    const cert = new DataAwsAcmCertificate(this, '', {
+      domain: `${options.environment}.thisissamarpan.com.`,
+      statuses: ["ISSUED"]
+    })
+
     /////////////////////////////////////////////////////////////////////////////
     //s3 backend to preserve terraform state
     /////////////////////////////////////////////////////////////////////////////
@@ -36,43 +47,7 @@ class WebsiteRootStack extends TerraformStack {
       region: 'us-east-1'
     })
 
-    /////////////////////
-    // Route53
-    /////////////////////
-
-    // hosted zone for subdomain
-    const deployRoute53Zone = new DataAwsRoute53Zone(this, 'route53-root-zone',{
-      name: `${options.environment}.thisissamarpan.com.`,
-      provider: AccountProvider
-    });
-
-    // certificate
-    const cert = new AcmCertificate(this, 'website-cert', {
-      domainName: `${options.environment}.thisissamarpan.com`,
-      validationMethod: 'DNS',
-      provider: AccountProvider,
-      dependsOn: [deployRoute53Zone]
-    });
-
-    // certificate record in the hosted zone
-    const certRecord = new Route53Record(this, 'website-route53-record-cert-validation',{
-      dependsOn:[deployRoute53Zone, cert],
-      name: cert.domainValidationOptions.get(0).resourceRecordName,
-      records: [cert.domainValidationOptions.get(0).resourceRecordValue],
-      type: cert.domainValidationOptions.get(0).resourceRecordType,
-      zoneId: deployRoute53Zone.zoneId,
-      ttl: 300,
-      provider: AccountProvider
-    });
-
-    // certificate record validation
-    new AcmCertificateValidation(this, 'website-cert-validation',{
-      dependsOn: [cert, certRecord],
-      certificateArn: cert.arn,
-      validationRecordFqdns: [certRecord.fqdn],
-      provider: AccountProvider
-    });
-
+    
     ////////////////////////////////////////
     // Virtual Private Cloud (VPC)
     ////////////////////////////////////////
@@ -339,7 +314,7 @@ class WebsiteRootStack extends TerraformStack {
 const app = new App();
 new WebsiteRootStack(app, "cdktf", {
   environment: `${process.env.STAGE}`,
-  containerName: 'website-application-container',
+  containerName: `${process.env.IMAGE}`,
   region: `${process.env.REGION}`,
   imageUri: `${process.env.FULLNAME}`
 });
