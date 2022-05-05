@@ -1,8 +1,6 @@
 version: 0.2
 env:
   shell: bash
-  variables:
-    IMAGE: 'thisissamarpan-website'
   parameter-store:
     AWS_ACCESS_KEY_ID: '/pipeline/$STAGE/accessKeyId'
     AWS_SECRET_ACCESS_KEY: '/pipeline/$STAGE/secretAccessKey'
@@ -30,7 +28,8 @@ phases:
     commands:
       - aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${ACCOUNT_NUMBER}.dkr.ecr.${REGION}.amazonaws.com
       - aws ecr create-repository --repository-name ${IMAGE} || true
-      - export FULLNAME="${ACCOUNT_NUMBER}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE}:latest"
+      - export TIMESTAMP=`date +%s`
+      - export FULLNAME="${ACCOUNT_NUMBER}.dkr.ecr.${REGION}.amazonaws.com/${IMAGE}:${TIMESTAMP}"
       - docker build . -t ${IMAGE}
       - docker tag ${IMAGE} ${FULLNAME}
       - docker push ${FULLNAME}

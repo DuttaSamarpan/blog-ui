@@ -5,7 +5,7 @@ import { AwsProvider } from "@cdktf/provider-aws";
 import { Lb, LbListener, LbTargetGroup } from "@cdktf/provider-aws/lib/elb";
 import { EcsCluster, EcsService, EcsTaskDefinition } from "@cdktf/provider-aws/lib/ecs";
 import { IamRole } from "@cdktf/provider-aws/lib/iam";
-import { DataAwsRoute53Zone, Route53Record, Route53Zone } from "@cdktf/provider-aws/lib/route53";
+import { DataAwsRoute53Zone, Route53Record } from "@cdktf/provider-aws/lib/route53";
 import { AcmCertificate } from "@cdktf/provider-aws/lib/acm/acm-certificate";
 import { AcmCertificateValidation } from "@cdktf/provider-aws/lib/acm/acm-certificate-validation";
 
@@ -40,28 +40,9 @@ class WebsiteRootStack extends TerraformStack {
     // Route53
     /////////////////////
 
-    // root route53  hosted zone
-    const rootRoute53Zone = new DataAwsRoute53Zone(this, 'route53-root-zone',{
-      name: 'thisissamarpan.com.',
-      provider: AccountProvider
-    });
-
     // hosted zone for subdomain
-    const deployRoute53Zone = new Route53Zone(this, 'website-route53-env-zone',{
-      name: `${options.environment}.thisissamarpan.com`,
-      comment: `${options.environment} Zone`,
-      provider: AccountProvider
-    });
-    
-    // NS records for subdomain
-    new Route53Record(this, 'subdomain-route53-record', {
-      dependsOn: [rootRoute53Zone],
-      name: `${options.environment}.thisissamarpan.com`,
-      type: 'NS',
-      records: deployRoute53Zone.nameServers,
-      ttl: 172800,
-      allowOverwrite: true,
-      zoneId: rootRoute53Zone.zoneId,
+    const deployRoute53Zone = new DataAwsRoute53Zone(this, 'route53-root-zone',{
+      name: `${options.environment}.thisissamarpan.com.`,
       provider: AccountProvider
     });
 
