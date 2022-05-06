@@ -1,4 +1,4 @@
 import streamlit as st
 
 # test code 
-st.write("I am a")
+st.write("I am not a genius")
